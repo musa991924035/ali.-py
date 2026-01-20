@@ -1,0 +1,82 @@
+from flask import Flask, request, render_template_string
+from deep_translator import GoogleTranslator
+from gtts import gTTS
+import io
+import base64
+
+app = Flask(__name__)
+
+HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Python Translator Web with Voice</title>
+<style>
+body { background-color: black; color: orange; font-family: Arial; text-align: center; padding: 50px;}
+textarea { width: 80%; height: 100px; font-size: 16px;}
+select, button { font-size: 16px; margin: 10px;}
+.result { margin-top: 20px; font-weight: bold; font-size: 18px;}
+</style>
+</head>
+<body>
+<h1>Python Translator</h1>
+<form method="POST">
+<textarea name="text" placeholder="Enter your text here..." required>{{ text or '' }}</textarea><br>
+<select name="direction">
+<option value="ar→en" {% if direction == "ar→en" %}selected{% endif %}>Arabic → English</option>
+<option value="en→ar" {% if direction == "en→ar" %}selected{% endif %}>English → Arabic</option>
+</select><br>
+<button type="submit">Translate & Listen</button>
+</form>
+{% if translated_text %}
+<div class="result">
+<h3>Translated Text:</h3>
+<p>{{ translated_text }}</p>
+<audio controls autoplay>
+<source src="data:audio/mp3;base64,{{ audio_data }}" type="audio/mp3">
+</audio>
+</div>
+{% endif %}
+</body>
+</html>
+"""
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    translated_text = ""
+    audio_data = ""
+    text = ""
+    direction = "ar→en"
+
+    if request.method == "POST":
+        text = request.form["text"]
+        direction = request.form["direction"]
+
+        try:
+            if direction == "ar→en":
+                translated_text = GoogleTranslator(source='ar', target='en').translate(text)
+                lang_code = 'en'
+            elif direction == "en→ar":
+                translated_text = GoogleTranslator(source='en', target='ar').translate(text)
+                lang_code = 'ar'
+            else:
+                translated_text = "Invalid direction!"
+                lang_code = 'en'
+
+            # إنشاء ملف صوتي في الذاكرة
+            mp3_fp = io.BytesIO()
+            tts = gTTS(text=translated_text, lang=lang_code)
+            tts.write_to_fp(mp3_fp)
+            mp3_fp.seek(0)
+
+            # تحويله إلى Base64 لعرضه مباشرة في المتصفح
+            audio_data = base64.b64encode(mp3_fp.read()).decode('utf-8')
+
+        except Exception as e:
+            translated_text = f"Error: {e}"
+
+    return render_template_string(HTML, translated_text=translated_text, audio_data=audio_data, text=text, direction=direction)
+
+if __name__ == "__main__":
+    app.run(debug=True)
